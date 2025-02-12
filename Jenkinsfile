@@ -13,7 +13,7 @@ pipeline {
         
         stage('build') {
             steps {
-                sh '''
+                bat '''
                     echo build start
                     mvn clean compile package -DskipTests=true
                 '''
