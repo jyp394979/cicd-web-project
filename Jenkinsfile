@@ -1,6 +1,7 @@
 pipeline {
     agent any
     tools {
+        jdk 'JDK11'
         maven 'maven3.9.9'
     }
     
@@ -13,18 +14,31 @@ pipeline {
         
         stage('build') {
             steps {
-                bat '''
+                sh '''
                     echo build start
                     mvn clean compile package -DskipTests=true
                 '''
             }
         }
         
-        stage('deploy') {
+        stage('SonarQube analysis') {
             steps {
-                deploy adapters: [tomcat9(credentialsId: 'deployer_user', path: '', url: 'http://localhost:8088')], contextPath: null, war: '**/*.war'
+                withSonarQubeEnv('sonarqube-server') {
+                    sh 'mvn sonar:sonar'
+                }
             }
         }
-
+        
+        stage('war deploy & build docker image') {
+            steps {
+                sshPublisher(publishers: [sshPublisherDesc(configName: 'docker ssh', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: 'docker build --tag=jyp394979/cicd-project-final -f Dockerfile . ;', execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '.', remoteDirectorySDF: false, removePrefix: 'target', sourceFiles: 'target/*.war')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)])
+            }
+        }
+        
+        stage('run container') {
+            steps {
+                sshPublisher(publishers: [sshPublisherDesc(configName: 'ansible ssh', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: 'ansible-playbook -i hosts create-cicd-devops-container.yml;', execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '', remoteDirectorySDF: false, removePrefix: '', sourceFiles: '')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)])
+            }
+        }
     }
 }
